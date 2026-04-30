@@ -1,71 +1,60 @@
 import torch
 import torch.nn as nn
 from transformers import BertConfig
+from tqdm.auto import tqdm
 
-# Feed Forward Network (Perceptron part)
-class BertFeedForward(nn.Module):
-    def __init__(self, config):
+class CustomFeedForwardLayer(nn.Module):
+    def __init__(self,config, rank = 64):
         super().__init__()
-        
+
         self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.activation = nn.GELU()
         self.linear2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
+        self.A = nn.Parameter(
+            torch.randn(config.intermediate_size, config.intermediate_size, rank)
+        )
+        self.A2 = nn.Parameter(
+            torch.randn(config.hidden_size, config.hidden_size, rank)
+        )
+
     def forward(self, x):
+
         x = self.linear1(x)
-        x = self.activation(x)
+        Ax = torch.einsum("bsi,oik->bsok", x, self.A)
+        quad = torch.sum(Ax * Ax, dim=-1)
+        x = self.activation(x+quad)
+
         x = self.linear2(x)
-        return x
-
-
-# One Transformer Layer
+        Ax = torch.einsum("bsi,oik->bsok", x, self.A2)
+        quad = torch.sum(Ax * Ax, dim=-1)
+        return x + quad
+    
 class BertLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self,config):
+        
         super().__init__()
 
-        # Self Attention
         self.attention = nn.MultiheadAttention(
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
-            batch_first=True
-        )
+            batch_first=True)
+        
+        self.cff = CustomFeedForwardLayer(config)
 
-        # Feed Forward (Perceptrons)
-        self.ffn = BertFeedForward(config)
-
-        # LayerNorms
         self.norm1 = nn.LayerNorm(config.hidden_size)
         self.norm2 = nn.LayerNorm(config.hidden_size)
 
-    def forward(self, x, attention_mask=None):
+    def forward(self, x,attention_mask=None):
 
-        # Self Attention
-        attn_output, _ = self.attention(x, x, x)
-        x = self.norm1(x + attn_output)
+        attention_output,_ = self.attention(x,x,x)
+        x = self.norm1(x + attention_output)
 
-        # Feed Forward
-        ffn_output = self.ffn(x)
-        x = self.norm2(x + ffn_output)
-
+        cffn_output = self.cff(x)
+        x = self.norm2(x + cffn_output)
+ 
         return x
-
-
-# Encoder (Stack of Layers)
-class BertEncoder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        self.layers = nn.ModuleList([
-            BertLayer(config) for _ in range(config.num_hidden_layers)
-        ])
-
-    def forward(self, x, attention_mask=None):
-        for layer in self.layers:
-            x = layer(x, attention_mask)
-        return x
-
-
-# Embeddings
+        
 class BertEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -95,19 +84,41 @@ class BertEmbeddings(nn.Module):
         embeddings = self.layer_norm(embeddings)
 
         return embeddings
+    
+
+class BertEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.layers = nn.ModuleList([
+            BertLayer(config) for _ in range(config.num_hidden_layers)
+        ])
+
+    def forward(self, x, attention_mask=None):
+        for layer in self.layers:
+            x = layer(x, attention_mask)
+        return x
 
 
-# Full BERT Model
 class MyBertModel(nn.Module):
     def __init__(self, config):
         super().__init__()
 
         self.embeddings = BertEmbeddings(config)
         self.encoder = BertEncoder(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-    def forward(self, input_ids, attention_mask=None):
+    def forward(self, input_ids, attention_mask=None,embed = False):
 
         x = self.embeddings(input_ids)
+        
+        if embed :
+            return x 
+        
         x = self.encoder(x, attention_mask)
+        logits = self.lm_head(x)
 
-        return x
+
+        return logits
+
+        # return x
