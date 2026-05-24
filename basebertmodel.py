@@ -112,13 +112,12 @@ class MyBertModel(nn.Module):
 
         x = self.embeddings(input_ids)
         
-        if embed :
-            return x 
-        
+
         x = self.encoder(x, attention_mask)
+
+        if embed:
+            return x[:, 0, :]  
+        
         logits = self.lm_head(x)
 
-
         return logits
-
-        # return x
