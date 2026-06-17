@@ -18,17 +18,17 @@ class CustomFeedForwardLayer(nn.Module):
             torch.randn(config.hidden_size, config.hidden_size, rank)
         )
 
+
     def forward(self, x):
-
-        x = self.linear1(x)
-        Ax = torch.einsum("bsi,oik->bsok", x, self.A)
-        quad = torch.sum(Ax * Ax, dim=-1)
-        x = self.activation(x+quad)
-
-        x = self.linear2(x)
-        Ax = torch.einsum("bsi,oik->bsok", x, self.A2)
-        quad = torch.sum(Ax * Ax, dim=-1)
-        return x + quad
+        x = self.linear1(x)      
+                                # (B, S, 1024)
+        # Ax = torch.einsum("bsi,oik->bsok", x, self.A)   # (B, S, 1024, 8)
+        # quad = torch.sum(Ax * Ax, dim=-1)               # (B, S, 1024)
+        # x = self.activation(x + quad) // converting to vanilla for now 
+        x = self.activation(x)
+        x = self.dropout(x)
+        x = self.linear2(x)                              # (B, S, 256)
+        return x
     
 class BertLayer(nn.Module):
     def __init__(self,config):
