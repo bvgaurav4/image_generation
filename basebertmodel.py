@@ -14,18 +14,18 @@ class CustomFeedForwardLayer(nn.Module):
         self.A = nn.Parameter(
             torch.randn(config.intermediate_size, config.intermediate_size, rank)
         )
-        self.A2 = nn.Parameter(
-            torch.randn(config.hidden_size, config.hidden_size, rank)
-        )
+        # self.A2 = nn.Parameter(
+        #     torch.randn(config.hidden_size, config.hidden_size, rank)
+        # )
 
 
     def forward(self, x):
         x = self.linear1(x)      
                                 # (B, S, 1024)
-        # Ax = torch.einsum("bsi,oik->bsok", x, self.A)   # (B, S, 1024, 8)
-        # quad = torch.sum(Ax * Ax, dim=-1)               # (B, S, 1024)
-        # x = self.activation(x + quad) // converting to vanilla for now 
-        x = self.activation(x)
+        Ax = torch.einsum("bsi,oik->bsok", x, self.A)   # (B, S, 1024, 8)
+        quad = torch.sum(Ax * Ax, dim=-1)               # (B, S, 1024)
+        x = self.activation(x + quad) #converting to vanilla for now
+        # x = self.activation(x)
         x = self.dropout(x)
         x = self.linear2(x)                              # (B, S, 256)
         return x
