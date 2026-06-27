@@ -132,7 +132,8 @@ class MyBertModel(nn.Module):
         x = self.encoder(x, attention_mask)
 
         if embed:
-            return x[:, 0, :]  
+            emb = x.mean(dim=1)
+            return emb
         
         logits = self.lm_head(x)
 
