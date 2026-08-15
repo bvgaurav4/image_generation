@@ -61,14 +61,22 @@ class BertLayer(nn.Module):
         self.norm1 = nn.LayerNorm(config.hidden_size)
         self.norm2 = nn.LayerNorm(config.hidden_size)
 
-    def forward(self, x,attention_mask=None):
+    def forward(self, x, attention_mask=None):
+        key_padding_mask = None
+        if attention_mask is not None:
+            # attention_mask: 1 = real token, 0 = padding
+            # key_padding_mask: True = ignore (padding), False = attend
+            key_padding_mask = (attention_mask == 0)
 
-        attention_output,_ = self.attention(x,x,x)
+        attention_output, _ = self.attention(
+            x, x, x,
+            key_padding_mask=key_padding_mask
+        )
         x = self.norm1(x + attention_output)
 
         cffn_output = self.cff(x)
         x = self.norm2(x + cffn_output)
- 
+
         return x
         
 class BertEmbeddings(nn.Module):
