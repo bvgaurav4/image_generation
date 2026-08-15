@@ -76,7 +76,6 @@ class BertLayer(nn.Module):
 
         cffn_output = self.cff(x)
         x = self.norm2(x + cffn_output)
-
         return x
         
 class BertEmbeddings(nn.Module):
